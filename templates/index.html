@@ -1,0 +1,1390 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RepoPilot — codebase inspection</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+
+:root{
+  --ink:#14171C;
+  --panel:#1B1F26;
+  --panel-raised:#20252E;
+  --line:#2A3038;
+  --text:#E9E7E1;
+  --text-muted:#8B93A0;
+  --text-faint:#565E6B;
+  --good:#3ECF9E;
+  --warn:#E8A23D;
+  --bad:#E5484D;
+  --wire:#4FA8E0;
+}
+
+*{
+  box-sizing:border-box;
+}
+
+html,body{
+  margin:0;
+  padding:0;
+}
+
+body{
+  background:var(--ink);
+  color:var(--text);
+  font-family:'Space Grotesk',sans-serif;
+  line-height:1.5;
+  min-height:100vh;
+}
+
+code,.mono,.src,textarea,input,.findings-file{
+  font-family:'IBM Plex Mono',monospace;
+}
+
+/* ---- header / masthead ---- */
+
+header{
+  border-bottom:1px solid var(--line);
+  padding:28px 40px 24px;
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:12px;
+}
+
+.brand{
+  display:flex;
+  align-items:baseline;
+  gap:14px;
+}
+
+.brand h1{
+  margin:0;
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:-0.01em;
+}
+
+.brand .dot{
+  width:9px;
+  height:9px;
+  border-radius:50%;
+  background:var(--good);
+  display:inline-block;
+  margin-right:8px;
+  box-shadow:0 0 0 3px rgba(62,207,158,0.15);
+}
+
+.brand .tagline{
+  color:var(--text-muted);
+  font-size:13px;
+}
+
+.llm-status{
+  font-size:12px;
+  color:var(--text-faint);
+  font-family:'IBM Plex Mono',monospace;
+  border:1px solid var(--line);
+  padding:5px 10px;
+  border-radius:3px;
+}
+
+.llm-status.on{
+  color:var(--good);
+  border-color:rgba(62,207,158,0.35);
+}
+
+.llm-status.off{
+  color:var(--warn);
+  border-color:rgba(232,162,61,0.35);
+}
+
+main{
+  max-width:1180px;
+  margin:0 auto;
+  padding:36px 40px 80px;
+}
+
+/* ---- empty state / upload ---- */
+
+.intake{
+  border:1px dashed var(--line);
+  border-radius:4px;
+  padding:56px 40px;
+  text-align:center;
+  background:var(--panel);
+}
+
+.intake h2{
+  font-size:26px;
+  margin:0 0 10px;
+  font-weight:600;
+}
+
+.intake p{
+  color:var(--text-muted);
+  max-width:480px;
+  margin:0 auto 26px;
+  font-size:14px;
+}
+
+.drop{
+  border:1px solid var(--line);
+  background:var(--panel-raised);
+  border-radius:4px;
+  padding:28px;
+  max-width:420px;
+  margin:0 auto;
+}
+
+input[type=file]{
+  color:var(--text-muted);
+  font-size:13px;
+  width:100%;
+}
+
+.scope-note{
+  margin-top:18px;
+  font-size:12px;
+  color:var(--text-faint);
+}
+
+button{
+  font-family:'Space Grotesk',sans-serif;
+  font-weight:600;
+  font-size:14px;
+  border-radius:3px;
+  border:1px solid var(--wire);
+  background:transparent;
+  color:var(--wire);
+  padding:10px 18px;
+  cursor:pointer;
+  transition:background 0.15s ease,color 0.15s ease;
+}
+
+button:hover{
+  background:var(--wire);
+  color:var(--ink);
+}
+
+button:disabled{
+  opacity:0.4;
+  cursor:not-allowed;
+}
+
+button:disabled:hover{
+  background:transparent;
+  color:var(--wire);
+}
+
+.primary-row{
+  margin-top:20px;
+}
+
+/* ---- New Repository button ---- */
+
+.new-repo-bar{
+  display:flex;
+  justify-content:flex-end;
+  margin-bottom:20px;
+}
+
+#newRepoBtn{
+  border-color:var(--line);
+  color:var(--text-muted);
+  background:var(--panel);
+}
+
+#newRepoBtn:hover{
+  border-color:var(--wire);
+  color:var(--wire);
+  background:var(--panel-raised);
+}
+
+/* ---- report grid ---- */
+
+.report{
+  display:none;
+}
+
+.report.active{
+  display:block;
+}
+
+.stat-row{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1px;
+  background:var(--line);
+  border:1px solid var(--line);
+  margin-bottom:28px;
+}
+
+.stat{
+  background:var(--panel);
+  padding:18px 20px;
+}
+
+.stat .num{
+  font-size:28px;
+  font-weight:700;
+  font-family:'IBM Plex Mono',monospace;
+}
+
+.stat .label{
+  font-size:12px;
+  color:var(--text-muted);
+  margin-top:4px;
+}
+
+.stat.high .num{
+  color:var(--bad);
+}
+
+.stat.medium .num{
+  color:var(--warn);
+}
+
+.stat.low .num{
+  color:var(--text-muted);
+}
+
+.summary-block{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:20px 24px;
+  margin-bottom:32px;
+  font-size:14.5px;
+  color:var(--text);
+}
+
+.summary-block .kicker{
+  font-size:12px;
+  color:var(--text-faint);
+  margin-bottom:8px;
+}
+
+.cols{
+  display:grid;
+  grid-template-columns:1.15fr 0.85fr;
+  gap:28px;
+  align-items:start;
+}
+
+@media (max-width:880px){
+  .cols{
+    grid-template-columns:1fr;
+  }
+}
+
+section.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:4px;
+  overflow:hidden;
+}
+
+.panel-head{
+  padding:16px 20px;
+  border-bottom:1px solid var(--line);
+  font-weight:600;
+  font-size:14px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.panel-head .count{
+  font-family:'IBM Plex Mono',monospace;
+  color:var(--text-muted);
+  font-size:12px;
+  font-weight:400;
+}
+
+/* findings list */
+
+.findings-list{
+  max-height:640px;
+  overflow-y:auto;
+}
+
+.finding{
+  padding:14px 20px;
+  border-bottom:1px solid var(--line);
+}
+
+.finding:last-child{
+  border-bottom:none;
+}
+
+.finding-top{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:6px;
+}
+
+.sev{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+
+.sev.high{
+  background:var(--bad);
+}
+
+.sev.medium{
+  background:var(--warn);
+}
+
+.sev.low{
+  background:var(--text-faint);
+}
+
+.findings-file{
+  font-size:12.5px;
+  color:var(--text-muted);
+}
+
+.finding-msg{
+  font-size:13.5px;
+  margin-bottom:8px;
+}
+
+.explain-btn{
+  font-size:11.5px;
+  padding:5px 10px;
+  border-color:var(--line);
+  color:var(--text-muted);
+}
+
+.explain-btn:hover{
+  background:var(--panel-raised);
+  color:var(--text);
+}
+
+.explanation{
+  margin-top:10px;
+  padding:10px 12px;
+  background:var(--panel-raised);
+  border-left:2px solid var(--wire);
+  font-size:13px;
+  color:var(--text);
+  display:none;
+}
+
+.explanation.show{
+  display:block;
+}
+
+/* ask panel */
+
+.ask-body{
+  padding:18px 20px;
+}
+
+.ask-row{
+  display:flex;
+  gap:8px;
+  margin-bottom:16px;
+}
+
+.ask-row input{
+  flex:1;
+  background:var(--panel-raised);
+  border:1px solid var(--line);
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:3px;
+  font-size:13.5px;
+}
+
+.ask-row input:focus{
+  outline:none;
+  border-color:var(--wire);
+}
+
+.qa-item{
+  margin-bottom:18px;
+}
+
+.qa-q{
+  font-size:13px;
+  color:var(--text-muted);
+  margin-bottom:6px;
+}
+
+.qa-a{
+  font-size:14px;
+  white-space:pre-wrap;
+  margin-bottom:8px;
+}
+
+.qa-sources{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+.qa-sources{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:flex-start;
+}
+
+.qa-sources .src-block{
+  flex-basis:100%;
+}
+
+button.src-chip{
+  font-family:'IBM Plex Mono',monospace;
+  font-weight:400;
+  font-size:11px;
+  color:var(--wire);
+  border:1px solid rgba(79,168,224,0.35);
+  padding:3px 7px;
+  border-radius:3px;
+  background:transparent;
+}
+
+button.src-chip:hover{
+  background:rgba(79,168,224,0.12);
+  color:var(--wire);
+}
+
+.lang-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:14px;
+}
+
+.lang-chip{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  color:var(--text-muted);
+  border:1px solid var(--line);
+  padding:3px 8px;
+  border-radius:3px;
+}
+
+.lang-chip.fw{
+  color:var(--good);
+  border-color:rgba(62,207,158,0.35);
+}
+
+.chip-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  margin-bottom:16px;
+}
+
+.sugg-chip{
+  font-size:12px;
+  padding:6px 11px;
+  border-color:var(--line);
+  color:var(--text-muted);
+  background:var(--panel-raised);
+}
+
+.sugg-chip:hover{
+  color:var(--text);
+  border-color:var(--wire);
+  background:var(--panel-raised);
+}
+
+.view-src-btn{
+  font-size:11px;
+  padding:4px 9px;
+  border-color:var(--line);
+  color:var(--text-faint);
+  margin-top:6px;
+}
+
+.view-src-btn:hover{
+  background:var(--panel-raised);
+  color:var(--text);
+}
+
+.src-block{
+  display:none;
+  margin-top:8px;
+  background:#0F1216;
+  border:1px solid var(--line);
+  border-radius:3px;
+  padding:12px 14px;
+  font-size:12.5px;
+  white-space:pre;
+  overflow-x:auto;
+  color:#C9D1D9;
+}
+
+.src-block.show{
+  display:block;
+}
+
+.src-block .loc{
+  color:var(--wire);
+  font-size:11px;
+  margin-bottom:8px;
+  display:block;
+  font-family:'IBM Plex Mono',monospace;
+}
+
+.empty-hint{
+  color:var(--text-faint);
+  font-size:13px;
+}
+
+.loading{
+  color:var(--text-muted);
+  font-size:13px;
+}
+
+.error-box{
+  color:var(--bad);
+  font-size:13px;
+  margin-top:12px;
+}
+
+::-webkit-scrollbar{
+  width:8px;
+}
+
+::-webkit-scrollbar-thumb{
+  background:var(--line);
+  border-radius:4px;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+
+  <div class="brand">
+    <h1><span class="dot"></span>RepoPilot</h1>
+    <span class="tagline">codebase analysis &amp; debugging assistant</span>
+  </div>
+
+  {% if llm_available %}
+  <div class="llm-status on">LLM layer: connected</div>
+  {% else %}
+  <div class="llm-status off">LLM layer: offline — set OPENAI_API_KEY</div>
+  {% endif %}
+
+</header>
+
+<main>
+
+  <!-- UPLOAD SCREEN -->
+
+  <div class="intake" id="intake">
+
+    <h2>Point it at a repo.</h2>
+
+    <p>
+      Upload a .zip of a Python codebase. RepoPilot parses every function and class,
+      runs static analysis for real issues, and lets you ask questions grounded in the actual code.
+    </p>
+
+    <div class="drop">
+
+      <input type="file" id="repoZip" accept=".zip">
+
+      <div class="primary-row">
+        <button id="analyzeBtn">Analyze repository</button>
+      </div>
+
+    </div>
+
+    <div class="scope-note">
+      Python only, single archive, up to 25MB. Nothing leaves this server except optional LLM calls for explanations.
+    </div>
+
+    <div id="analyzeError" class="error-box"></div>
+
+    <div id="analyzeLoading"
+         class="loading"
+         style="display:none; margin-top:16px;">
+      Parsing files, indexing, running static checks…
+    </div>
+
+  </div>
+
+
+  <!-- REPORT SCREEN -->
+
+  <div class="report" id="report">
+
+    <!-- NEW REPOSITORY BUTTON -->
+
+    <div class="new-repo-bar">
+      <button id="newRepoBtn">＋ New Repository</button>
+    </div>
+
+    <div class="stat-row" id="statRow"></div>
+
+    <div class="summary-block" id="overviewBlock">
+
+      <div class="kicker">Project overview</div>
+
+      <div id="overviewText"></div>
+
+      <div class="lang-chips" id="langChips"></div>
+
+    </div>
+
+
+    <div class="summary-block">
+
+      <div class="kicker">Bug &amp; quality summary</div>
+
+      <div id="summaryText"></div>
+
+    </div>
+
+
+    <div class="cols">
+
+      <!-- FINDINGS -->
+
+      <section class="panel">
+
+        <div class="panel-head">
+          <span>Findings</span>
+          <span class="count" id="findingsCount"></span>
+        </div>
+
+        <div class="findings-list" id="findingsList"></div>
+
+      </section>
+
+
+      <!-- ASK -->
+
+      <section class="panel">
+
+        <div class="panel-head">
+          <span>Ask about this repo</span>
+        </div>
+
+        <div class="ask-body">
+
+          <div class="ask-row">
+
+            <input
+              type="text"
+              id="askInput"
+              placeholder="e.g. where is the database connection opened?"
+            >
+
+            <button id="askBtn">Ask</button>
+
+          </div>
+
+          <div class="chip-row" id="suggestedChips"></div>
+
+          <div id="qaThread"></div>
+
+          <div class="empty-hint" id="qaEmptyHint">
+            Answers are grounded only in retrieved code — RepoPilot cites the file/function it used,
+            and you can view the exact source behind each answer.
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+
+  </div>
+
+</main>
+
+
+<script>
+
+const intake = document.getElementById('intake');
+const report = document.getElementById('report');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const analyzeError = document.getElementById('analyzeError');
+const analyzeLoading = document.getElementById('analyzeLoading');
+
+let findingsCache = [];
+
+
+/* =========================================================
+   ANALYZE REPOSITORY
+   ========================================================= */
+
+analyzeBtn.addEventListener('click', async () => {
+
+  const fileInput = document.getElementById('repoZip');
+
+  if (!fileInput.files.length) {
+    analyzeError.textContent = 'Choose a .zip file first.';
+    return;
+  }
+
+  analyzeError.textContent = '';
+  analyzeLoading.style.display = 'block';
+  analyzeBtn.disabled = true;
+
+  const fd = new FormData();
+
+  fd.append('repo_zip', fileInput.files[0]);
+
+  try {
+
+    const res = await fetch('/api/analyze', {
+      method:'POST',
+      body:fd
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+
+      analyzeError.textContent =
+        data.error || 'Analysis failed.';
+
+      analyzeLoading.style.display = 'none';
+      analyzeBtn.disabled = false;
+
+      return;
+    }
+
+    renderReport(data);
+
+    await loadFindings();
+
+    intake.style.display = 'none';
+    report.classList.add('active');
+
+  } catch (e) {
+
+    analyzeError.textContent =
+      'Request failed: ' + e.message;
+
+  } finally {
+
+    analyzeLoading.style.display = 'none';
+    analyzeBtn.disabled = false;
+
+  }
+
+});
+
+
+/* =========================================================
+   RENDER REPORT
+   ========================================================= */
+
+function renderReport(data) {
+
+  const sc = data.severity_counts || {
+    high:0,
+    medium:0,
+    low:0
+  };
+
+  const statRow =
+    document.getElementById('statRow');
+
+  statRow.innerHTML = `
+
+    <div class="stat">
+      <div class="num">${data.file_count}</div>
+      <div class="label">files indexed</div>
+    </div>
+
+    <div class="stat">
+      <div class="num">${data.chunk_count}</div>
+      <div class="label">functions / classes indexed</div>
+    </div>
+
+    <div class="stat high">
+      <div class="num">${sc.high}</div>
+      <div class="label">high severity</div>
+    </div>
+
+    <div class="stat medium">
+      <div class="num">${sc.medium}</div>
+      <div class="label">medium severity</div>
+    </div>
+
+  `;
+
+  document.getElementById('summaryText').textContent =
+    data.summary;
+
+  document.getElementById('overviewText').textContent =
+    data.overview || '';
+
+  const langChips =
+    document.getElementById('langChips');
+
+  const langEntries =
+    Object.entries(data.languages || {})
+    .sort((a,b) => b[1] - a[1]);
+
+  const fwChips =
+    (data.framework_hints || [])
+    .map(f =>
+      `<span class="lang-chip fw">${f}</span>`
+    );
+
+  const extChips =
+    langEntries.map(([ext,count]) =>
+      `<span class="lang-chip">
+        ${ext || 'no ext'} × ${count}
+      </span>`
+    );
+
+  langChips.innerHTML =
+    fwChips.join('') + extChips.join('');
+
+  renderSuggestedChips();
+
+}
+
+
+/* =========================================================
+   SUGGESTED QUESTIONS
+   ========================================================= */
+
+function renderSuggestedChips() {
+
+  const suggestions = [
+
+    'Explain the architecture of this project',
+
+    'Find potential bugs in the code',
+
+    'Are there any obvious security issues?',
+
+    'How can this code be improved?',
+
+    'Generate a unit test for a key function',
+
+  ];
+
+  document.getElementById('suggestedChips').innerHTML =
+    suggestions.map(s =>
+
+      `<button
+        class="sugg-chip"
+        onclick="document.getElementById('askInput').value=${JSON.stringify(s)}; askQuestion();"
+      >
+        ${s}
+      </button>`
+
+    ).join('');
+
+}
+
+
+/* =========================================================
+   LOAD FINDINGS
+   ========================================================= */
+
+async function loadFindings() {
+
+  const res =
+    await fetch('/api/findings');
+
+  const data =
+    await res.json();
+
+  findingsCache =
+    data.findings;
+
+  document.getElementById('findingsCount').textContent =
+    findingsCache.length + ' total';
+
+  const list =
+    document.getElementById('findingsList');
+
+  if (!findingsCache.length) {
+
+    list.innerHTML =
+      '<div class="finding">' +
+      '<span class="empty-hint">' +
+      'No issues detected by static analysis. Clean run.' +
+      '</span>' +
+      '</div>';
+
+    return;
+  }
+
+  list.innerHTML =
+    findingsCache.map(f => `
+
+      <div class="finding" data-id="${f.id}">
+
+        <div class="finding-top">
+
+          <span class="sev ${f.severity}"></span>
+
+          <span class="findings-file">
+            ${f.file_path}:${f.line}
+          </span>
+
+        </div>
+
+        <div class="finding-msg">
+          ${escapeHtml(f.message)}
+        </div>
+
+        <button
+          class="explain-btn"
+          onclick="explainFinding(${f.id}, this)"
+        >
+          Explain &amp; suggest fix
+        </button>
+
+        <button
+          class="explain-btn view-src-btn"
+          onclick="viewSourceForFinding('${f.file_path}', ${f.line}, this)"
+        >
+          Show me where
+        </button>
+
+        <div
+          class="explanation"
+          id="explain-${f.id}">
+        </div>
+
+        <div
+          class="src-block"
+          id="src-finding-${f.id}">
+        </div>
+
+      </div>
+
+    `).join('');
+
+}
+
+
+/* =========================================================
+   SHOW SOURCE FOR FINDING
+   ========================================================= */
+
+async function viewSourceForFinding(filePath,line,btn) {
+
+  const container =
+    btn.closest('.finding');
+
+  const box =
+    container.querySelector('.src-block');
+
+  if (box.classList.contains('show')) {
+
+    box.classList.remove('show');
+
+    return;
+  }
+
+  box.classList.add('show');
+
+  box.textContent = 'Loading…';
+
+  try {
+
+    const res =
+      await fetch(
+        `/api/source_at?file_path=${encodeURIComponent(filePath)}&line=${line}`
+      );
+
+    const data =
+      await res.json();
+
+    if (!res.ok) {
+
+      box.textContent =
+        data.error || 'Source not found.';
+
+      return;
+    }
+
+    renderSourceBlock(box,data);
+
+  } catch(e) {
+
+    box.textContent =
+      'Failed to fetch source.';
+
+  }
+
+}
+
+
+/* =========================================================
+   RENDER SOURCE
+   ========================================================= */
+
+function renderSourceBlock(box,data) {
+
+  box.innerHTML =
+    `<span class="loc">
+      ${data.file_path} :: ${data.name}
+      (lines ${data.start_line}-${data.end_line})
+    </span>`;
+
+  const pre =
+    document.createElement('span');
+
+  pre.textContent =
+    data.source;
+
+  box.appendChild(pre);
+
+}
+
+
+/* =========================================================
+   EXPLAIN FINDING
+   ========================================================= */
+
+async function explainFinding(id,btn) {
+
+  const box =
+    document.getElementById('explain-' + id);
+
+  if (box.classList.contains('show')) {
+
+    box.classList.remove('show');
+
+    return;
+  }
+
+  box.classList.add('show');
+
+  box.textContent =
+    'Thinking…';
+
+  btn.disabled = true;
+
+  try {
+
+    const res =
+      await fetch('/api/explain', {
+
+        method:'POST',
+
+        headers:{
+          'Content-Type':'application/json'
+        },
+
+        body:JSON.stringify({id})
+
+      });
+
+    const data =
+      await res.json();
+
+    box.textContent =
+      data.explanation ||
+      data.error ||
+      'No explanation available.';
+
+  } catch(e) {
+
+    box.textContent =
+      'Failed to fetch explanation.';
+
+  } finally {
+
+    btn.disabled = false;
+
+  }
+
+}
+
+
+/* =========================================================
+   ASK QUESTIONS
+   ========================================================= */
+
+document
+  .getElementById('askBtn')
+  .addEventListener('click',askQuestion);
+
+document
+  .getElementById('askInput')
+  .addEventListener('keydown',(e) => {
+
+    if(e.key === 'Enter')
+      askQuestion();
+
+  });
+
+
+async function askQuestion() {
+
+  const input =
+    document.getElementById('askInput');
+
+  const q =
+    input.value.trim();
+
+  if(!q)
+    return;
+
+  const thread =
+    document.getElementById('qaThread');
+
+  document
+    .getElementById('qaEmptyHint')
+    .style.display = 'none';
+
+  const item =
+    document.createElement('div');
+
+  item.className =
+    'qa-item';
+
+  item.innerHTML = `
+
+    <div class="qa-q">
+      ${escapeHtml(q)}
+    </div>
+
+    <div class="qa-a loading">
+      Searching codebase…
+    </div>
+
+  `;
+
+  thread.appendChild(item);
+
+  input.value = '';
+
+  try {
+
+    const res =
+      await fetch('/api/ask', {
+
+        method:'POST',
+
+        headers:{
+          'Content-Type':'application/json'
+        },
+
+        body:JSON.stringify({
+          question:q
+        })
+
+      });
+
+    const data =
+      await res.json();
+
+    const answerEl =
+      item.querySelector('.qa-a');
+
+    answerEl.classList.remove('loading');
+
+    if(!res.ok) {
+
+      answerEl.textContent =
+        data.error ||
+        'Failed to answer.';
+
+      return;
+    }
+
+    answerEl.textContent =
+      data.answer;
+
+    if(data.sources && data.sources.length) {
+
+      const srcRow =
+        document.createElement('div');
+
+      srcRow.className =
+        'qa-sources';
+
+      data.sources.forEach((s,i) => {
+
+        const chip =
+          document.createElement('button');
+
+        chip.className =
+          'src-chip';
+
+        chip.style.cursor =
+          'pointer';
+
+        chip.textContent =
+          `${s.file_path} :: ${s.name}`;
+
+        const box =
+          document.createElement('div');
+
+        box.className =
+          'src-block';
+
+        chip.addEventListener('click',() => {
+
+          if(box.classList.contains('show')) {
+
+            box.classList.remove('show');
+
+            return;
+          }
+
+          box.classList.add('show');
+
+          renderSourceBlock(box,s);
+
+        });
+
+        srcRow.appendChild(chip);
+
+        srcRow.appendChild(box);
+
+      });
+
+      item.appendChild(srcRow);
+
+    }
+
+  } catch(e) {
+
+    item.querySelector('.qa-a').textContent =
+      'Request failed: ' + e.message;
+
+  }
+
+}
+
+
+/* =========================================================
+   NEW REPOSITORY
+   ========================================================= */
+
+document
+  .getElementById('newRepoBtn')
+  .addEventListener('click',() => {
+
+    /*
+     * Hide current report
+     */
+    report.classList.remove('active');
+
+    /*
+     * Show upload screen
+     */
+    intake.style.display = 'block';
+
+    /*
+     * Reset file input
+     */
+    document.getElementById('repoZip').value = '';
+
+    /*
+     * Clear error/loading messages
+     */
+    analyzeError.textContent = '';
+
+    analyzeLoading.style.display =
+      'none';
+
+    /*
+     * Clear report statistics
+     */
+    document.getElementById('statRow').innerHTML =
+      '';
+
+    document.getElementById('summaryText').textContent =
+      '';
+
+    document.getElementById('overviewText').textContent =
+      '';
+
+    document.getElementById('langChips').innerHTML =
+      '';
+
+    /*
+     * Clear findings
+     */
+    document.getElementById('findingsList').innerHTML =
+      '';
+
+    document.getElementById('findingsCount').textContent =
+      '';
+
+    /*
+     * Clear Q&A history
+     */
+    document.getElementById('qaThread').innerHTML =
+      '';
+
+    document.getElementById('suggestedChips').innerHTML =
+      '';
+
+    document.getElementById('askInput').value =
+      '';
+
+    document.getElementById('qaEmptyHint').style.display =
+      'block';
+
+    /*
+     * Reset local findings cache
+     */
+    findingsCache = [];
+
+    /*
+     * Enable Analyze button
+     */
+    analyzeBtn.disabled =
+      false;
+
+    /*
+     * Return to top
+     */
+    window.scrollTo({
+      top:0,
+      behavior:'smooth'
+    });
+
+  });
+
+
+/* =========================================================
+   HTML ESCAPE
+   ========================================================= */
+
+function escapeHtml(str) {
+
+  const div =
+    document.createElement('div');
+
+  div.textContent =
+    str;
+
+  return div.innerHTML;
+
+}
+
+</script>
+
+</body>
+</html>
+```
