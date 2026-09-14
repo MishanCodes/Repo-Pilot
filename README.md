@@ -1,6 +1,5 @@
 # RepoPilot — AI Codebase Analysis & Debugging Assistant
 
-# RepoPilot — AI Codebase Analysis & Debugging Assistant
 
 ## Live Demo : (https://repo-pilot-8219.onrender.com/)
 ## GitHub Repository: (https://github.com/MishanCodes/Repo-Pilot)
